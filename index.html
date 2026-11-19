@@ -11,14 +11,15 @@
  #c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
  #side{flex:none;width:300px;overflow:auto;background:#fff;border-left:1px solid #ccc;font-size:12px;padding:6px;box-sizing:border-box}
  #side label{display:block;margin:2px 0}
+ #pick{position:absolute;left:8px;top:8px;right:8px;z-index:2;background:rgba(255,246,200,.95);padding:6px 10px;font-size:14px;font-weight:bold;border:1px solid #c90;pointer-events:none;min-height:1.2em}
  #info{position:absolute;left:8px;bottom:8px;right:8px;background:rgba(255,255,255,.9);padding:4px 8px;font-size:12px;border:1px solid #ccc}
  @media (max-width:700px){#main{flex-direction:column}#vw{flex:none;height:57vh;height:57dvh}#side{flex:1;width:auto;border-left:none;border-top:1px solid #ccc}#hint{display:none}}
 </style></head><body>
 <div id="bar">장면 <select id="scene"></select>
  <button id="fit">전체 보기</button><button id="near">시료 주변</button>
  <label><input type="checkbox" id="boxon" checked> 차광 상자(반투명)</label>
- <span id="hint">드래그: 돌리기 · 휠: 확대 · 오른쪽 드래그: 옮기기 · 부품 클릭: 이름</span></div>
-<div id="main"><div id="vw"><canvas id="c"></canvas><div id="info">개념 조립 모델 (제작 도면 아님). 카메라·분광기 분기는 고정 10:90 빔스플리터(움직이는 부품 없음).</div></div><div id="side"></div></div>
+ <span id="hint">드래그: 돌리기 · 휠: 확대 · 오른쪽 드래그: 옮기기 · 부품 클릭·탭: 이름</span></div>
+<div id="main"><div id="vw"><canvas id="c"></canvas><div id="pick">부품을 누르면(탭) 이름이 여기에 나옵니다</div><div id="info">개념 조립 모델 (제작 도면 아님). 카메라·분광기 분기는 고정 10:90 빔스플리터(움직이는 부품 없음).</div></div><div id="side"></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -59,7 +60,10 @@ function side(meta){const d=document.getElementById('side');d.innerHTML='<b>묶�
  const h=document.createElement('div');h.innerHTML='<br><b>부품</b>';d.appendChild(h);
  for(const [g,arr] of Object.entries(groups)){if(g==='move'&&arr.length>40){const p=document.createElement('div');p.textContent=`(지그 부품 ${arr.length}개는 목록 생략, 클릭하면 이름 표시)`;d.appendChild(p);continue;}
   arr.forEach(o=>{const p=document.createElement('div');p.textContent='· '+o.userData.name;p.style.cursor='pointer';p.onclick=()=>flash(o);d.appendChild(p);});}}
-function flash(o){const m=o.material;const c=m.emissive.getHex();m.emissive.setHex(0xff3300);setTimeout(()=>m.emissive.setHex(c),900);document.getElementById('info').textContent=o.userData.name;}
+let picked=null,pickedEm=0;
+function flash(o){if(picked&&picked.material){picked.material.emissive.setHex(pickedEm);}
+ picked=o;pickedEm=o.material.emissive.getHex();o.material.emissive.setHex(0xff3300);
+ document.getElementById('pick').textContent=o.userData.name;}
 function fit(near){if(!root)return;const b=new THREE.Box3();
  root.traverse(o=>{if(o.isMesh&&o.visible&&(!near||o.userData.group==='move'||o.name.indexOf('대물')>=0))b.expandByObject(o);});
  if(near){const c=b.getCenter(new THREE.Vector3());b.min.set(c.x-150,c.y-150,0);b.max.set(c.x+150,c.y+150,200);}
@@ -69,12 +73,15 @@ document.getElementById('fit').onclick=()=>fit(false);document.getElementById('n
 document.getElementById('boxon').onchange=e=>(groups.box||[]).forEach(o=>o.visible=e.target.checked);
 sel.onchange=()=>load(sel.value);
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
-canvas.addEventListener('dblclick',e=>{const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
- ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root?root.children:[],true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
- if(hit.length)flash(hit[0].object);});
-canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
- ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root?root.children:[],true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
- if(hit.length)document.getElementById('info').textContent=hit[0].object.userData.name;});
+// tap = pointerdown+pointerup within 6 px and 500 ms; OrbitControls swallows the synthetic click on touch, so click is not used
+const ptrs=new Map();let tap=null;
+canvas.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,1);tap=ptrs.size===1?{x:e.clientX,y:e.clientY,t:performance.now()}:null;});
+canvas.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);tap=null;});
+canvas.addEventListener('pointerup',e=>{ptrs.delete(e.pointerId);const t0=tap;tap=null;
+ if(!t0||!root)return;if(Math.hypot(e.clientX-t0.x,e.clientY-t0.y)>6||performance.now()-t0.t>500)return;
+ const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
+ ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root.children,true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
+ if(hit.length)flash(hit[0].object);else document.getElementById('pick').textContent='(빈 곳) 부품 위를 눌러 주세요';});
 function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);}
 resize();load(sel.value);loop();
 </script></body></html>
