@@ -1,87 +1,174 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PL/EL + LBIC 통합 지도 장치 (개념 3D, 2026-11-19)</title>
+<title>PL/EL + LBIC 통합 지도 장치 (알루미늄 프로파일 뼈대, 개념 3D, 2026-11-19)</title>
 <style>
  html,body{margin:0;height:100%}
- body{font-family:Arial,'Malgun Gothic',sans-serif;background:#f4f4f4;color:#111;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
- #bar{flex:none;padding:6px 10px;background:#fff;border-bottom:1px solid #ccc;font-size:13px}
+ body{font-family:Arial,'Malgun Gothic',sans-serif;background:#e9ebee;color:#111;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+ #bar{flex:none;padding:6px 10px;background:#fff;border-bottom:1px solid #ccc;font-size:13px;line-height:2}
  #bar select,#bar button{font-size:13px;margin-right:6px}
  #main{flex:1;min-height:0;display:flex}
  #vw{flex:1;position:relative;min-width:0;min-height:0}
  #c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
- #side{flex:none;width:300px;overflow:auto;background:#fff;border-left:1px solid #ccc;font-size:12px;padding:6px;box-sizing:border-box}
+ #side{flex:none;width:310px;overflow:auto;background:#fff;border-left:1px solid #ccc;font-size:12px;padding:6px;box-sizing:border-box}
  #side label{display:block;margin:2px 0}
  #pick{position:absolute;left:8px;top:8px;right:8px;z-index:2;background:rgba(255,246,200,.95);padding:6px 10px;font-size:14px;font-weight:bold;border:1px solid #c90;pointer-events:none;min-height:1.2em}
  #info{position:absolute;left:8px;bottom:8px;right:8px;background:rgba(255,255,255,.9);padding:4px 8px;font-size:12px;border:1px solid #ccc}
- @media (max-width:700px){#main{flex-direction:column}#vw{flex:none;height:57vh;height:57dvh}#side{flex:1;width:auto;border-left:none;border-top:1px solid #ccc}#hint{display:none}}
-</style></head><body>
+ #load{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.92);padding:8px 14px;border:1px solid #999;font-size:14px}
+ @media (max-width:700px){#main{flex-direction:column}#vw{flex:none;height:58vh;height:58dvh}#side{flex:1;width:auto;border-left:none;border-top:1px solid #ccc}#hint{display:none}}
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+</head><body>
 <div id="bar">장면 <select id="scene"></select>
- <button id="fit">전체 보기</button><button id="near">시료 주변</button>
+ 조립 단계 <select id="step"></select>
+ <button id="fit">전체 보기</button><button id="near">시료 주변</button><button id="headv">광학 머리</button>
  <label><input type="checkbox" id="boxon" checked> 차광 상자(반투명)</label>
  <span id="hint">드래그: 돌리기 · 휠: 확대 · 오른쪽 드래그: 옮기기 · 부품 클릭·탭: 이름</span></div>
-<div id="main"><div id="vw"><canvas id="c"></canvas><div id="pick">부품을 누르면(탭) 이름이 여기에 나옵니다</div><div id="info">개념 조립 모델 (제작 도면 아님). 카메라·분광기 분기는 고정 10:90 빔스플리터(움직이는 부품 없음).</div></div><div id="side"></div></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<div id="main"><div id="vw"><canvas id="c"></canvas><div id="pick">부품을 누르면(탭) 이름이 여기에 나옵니다</div><div id="load">불러오는 중…</div><div id="info"></div></div><div id="side"></div></div>
 <script src="mapper_models.js"></script>
-<script>
-const GROUP_KO={col:'광학 기둥·레이저 팔',vap:'초점 이동대',led1:'470 nm 출력부',led2:'940 nm 출력부',move:'지그·받침판·XY 윗판',stage:'XY 몸체',board:'브레드보드',box:'차광 상자',reserve:'예비 면적'};
-const canvas=document.getElementById('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(window.devicePixelRatio);
-const scene=new THREE.Scene();scene.background=new THREE.Color(0xf4f4f4);
-const camera=new THREE.PerspectiveCamera(35,1,1,20000);camera.up.set(0,0,1);
-const controls=new THREE.OrbitControls(camera,canvas);
-scene.add(new THREE.HemisphereLight(0xffffff,0x666666,0.75));const dl=new THREE.DirectionalLight(0xffffff,0.65);dl.position.set(400,-600,900);scene.add(dl);
-let root=null,groups={};
-const vw=document.getElementById('vw');
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+const M = window.MAPPER, G = window.MAPPER_GLB;
+const GROUP_KO = {frame:'알루미늄 프로파일 뼈대(미스미)', rail:'머리 레일', head:'광학 머리(케이지)', arm:'레이저 팔', led:'LED 출력부', board:'브레드보드·XY 스테이지', box:'차광 상자', jig:'지그·받침판·XY 윗판'};
+const STEP_KO = ['0 바닥(브레드보드·스테이지·지그)','1 뒤 바닥 레일 2','2 기둥 2 + 바닥 가로대','3 뒤 45° 보강 2','4 가로대 3 + 면 안 대각','5 머리 레일','6 케이지 머리(대물~카메라)','7 레이저 팔','8 LED 출력부 + 차광 상자'];
+// material by kind: [metalness, roughness, opacity]
+const MAT = {prof:[0.55,0.45], brk:[0.6,0.4], steel:[0.9,0.3], blacknut:[0.8,0.4], tlblack:[0.35,0.5], tlsteel:[0.9,0.3], glass:[0,0.05,0.35], ndglass:[0,0.1,0.6], dichroic:[0,0.05,0.5],
+  camera:[0.3,0.5], camred:[0.4,0.4], slider:[0.2,0.6], det:[0.3,0.5], laser:[0.8,0.3], obj:[0.3,0.5], objring:[0.8,0.3], board:[0.4,0.55], stage:[0.5,0.45], stagetop:[0.6,0.4],
+  adapter:[0,0.7], fibre:[0,0.6], boxwall:[0,0.9,0.14], reserve:[0,0.9], led470:[0.3,0.4], led940:[0.3,0.4], post:[0.9,0.3], pcb:[0,0.5], pin:[1,0.3], screw:[0.9,0.35], sma:[0.9,0.3], knob:[0.1,0.5],
+  jig_glass:[0,0.05,0.35], jig_lid:[0.5,0.5], jig_metal:[0.7,0.4], frame:[0.2,0.6], base:[0.3,0.5], glass_:[0,0.1,0.35]};
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xe9ebee);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture; scene.environmentIntensity = 0.85;
+const camera = new THREE.PerspectiveCamera(32, 1, 5, 20000);
+const controls = new OrbitControls(camera, canvas); controls.enableDamping = true;
+const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(-300, 500, 700); scene.add(key);
+const rim = new THREE.DirectionalLight(0xdfe8ff, 0.5); rim.position.set(500, -300, 300); scene.add(rim);
+const root = new THREE.Group(); root.rotation.x = -Math.PI/2; scene.add(root);   // CAD (X,Y,Z) -> three (x, z, -y)
+const vw = document.getElementById('vw');
 function resize(){const w=vw.clientWidth,h=vw.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 window.addEventListener('resize',resize);if(window.ResizeObserver)new ResizeObserver(resize).observe(vw);
-const sel=document.getElementById('scene');
-for(const k of Object.keys(window.MAPPER_META)){const o=document.createElement('option');o.value=k;o.textContent=window.MAPPER_META[k].title;sel.appendChild(o);}
-function b64buf(b){const s=atob(b);const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer;}
-function load(key){
- if(root){scene.remove(root);}groups={};
- const meta=window.MAPPER_META[key];const names=meta.order;
- new THREE.GLTFLoader().parse(b64buf(window.MAPPER_GLB[key]),'',g=>{
-  root=g.scene;let i=0;
-  root.traverse(o=>{if(o.isMesh){
-    // GLTFLoader sanitises node names; parts were written in order, so map by order
-    const nm=names[i]||o.name;const gr=meta.groups[nm]||'?';i++;
-    const isBox=gr==='box';
-    o.material=new THREE.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.6,metalness:0.05,
-      transparent:isBox,opacity:isBox?0.12:1,depthWrite:!isBox,side:THREE.DoubleSide});
-    o.userData.name=nm;o.userData.group=gr;(groups[gr]=groups[gr]||[]).push(o);}});
-  scene.add(root);side(meta);fit(false);
-  document.getElementById('info').textContent=`${meta.title}: 시료면 높이 ${meta.z_sample} mm, 카메라 위 끝 ${meta.top} mm, 대물 끝-지그 최고점 ${meta.wd_gap} mm (개념 모델)`;
- });}
-function side(meta){const d=document.getElementById('side');d.innerHTML='<b>묶음 보이기</b>';
- for(const [g,arr] of Object.entries(groups)){const l=document.createElement('label');const c=document.createElement('input');c.type='checkbox';c.checked=true;
-  c.onchange=()=>arr.forEach(o=>o.visible=c.checked);l.appendChild(c);l.append(` ${GROUP_KO[g]||g} (${arr.length})`);d.appendChild(l);}
- const h=document.createElement('div');h.innerHTML='<br><b>부품</b>';d.appendChild(h);
- for(const [g,arr] of Object.entries(groups)){if(g==='move'&&arr.length>40){const p=document.createElement('div');p.textContent=`(지그 부품 ${arr.length}개는 목록 생략, 클릭하면 이름 표시)`;d.appendChild(p);continue;}
-  arr.forEach(o=>{const p=document.createElement('div');p.textContent='· '+o.userData.name;p.style.cursor='pointer';p.onclick=()=>flash(o);d.appendChild(p);});}}
+const b64buf=b=>{const s=atob(b);const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer;};
+const loader = new GLTFLoader();
+const cache = {};           // key -> THREE.Group (parts with userData), loaded once
+function matOf(m){
+  const t = MAT[m.kind] || [0.3,0.5];
+  const p = {color:new THREE.Color(m.rgb[0],m.rgb[1],m.rgb[2]), metalness:t[0], roughness:t[1], side:THREE.DoubleSide};
+  if(t[2]!==undefined){p.transparent=true;p.opacity=t[2];p.depthWrite=false;}
+  return new THREE.MeshPhysicalMaterial(p);
+}
+function loadKey(k){
+  if(cache[k]) return Promise.resolve(cache[k]);
+  return new Promise((res,rej)=>{
+    loader.parse(b64buf(G[k]),'',g=>{
+      const metas = M.meta[k]; let i=0; const arr = [];
+      const meshes=[]; g.scene.traverse(o=>{if(o.isMesh)meshes.push(o);});
+      for(const o of meshes){
+        const m = metas[i++]; if(!m) continue;
+        let geo=o.geometry.clone(); o.updateMatrix(); geo.applyMatrix4(o.matrix); geo.deleteAttribute('normal'); geo=toCreasedNormals(geo, THREE.MathUtils.degToRad(35));
+        const mesh=new THREE.Mesh(geo, matOf(m)); mesh.userData={name:m.name, pno:m.pno, group:m.group, step:m.step, kind:m.kind};
+        if(m.kind!=='boxwall' && m.kind!=='board' && geo.attributes.position.count<30000){
+          const eg=new THREE.EdgesGeometry(geo, 38); const ln=new THREE.LineSegments(eg,new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:0.28}));
+          ln.userData.isEdge=true; mesh.add(ln);
+        }
+        arr.push(mesh);
+      }
+      cache[k]=arr; res(arr);
+    }, rej);
+  });
+}
+const sel=document.getElementById('scene'), stepSel=document.getElementById('step');
+for(const k of Object.keys(M.scenes)){const o=document.createElement('option');o.value=k;o.textContent=M.scenes[k].title;sel.appendChild(o);}
+STEP_KO.forEach((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=i===0?'전체 (0–8단계)':'~ '+t;stepSel.appendChild(o);});
+stepSel.value='0';
+let cur=null, parts=[], groupsVis={}, curStep=0;
+const gFixed=new THREE.Group(), gLift=new THREE.Group(), gObj=new THREE.Group(), gLens=new THREE.Group(), gJig=new THREE.Group();
+root.add(gFixed,gLift,gObj,gLens,gJig);
+function clearG(g){while(g.children.length)g.remove(g.children[0]);}
+const cloneGroup=(src)=>{const out=new THREE.Group(); for(const m of src.children){const c=new THREE.Mesh(m.geometry,m.material);c.userData=m.userData;for(const ch of m.children){const l=new THREE.LineSegments(ch.geometry,ch.material);l.userData.isEdge=true;c.add(l);} out.add(c);} return out;};
+async function show(sc){
+  document.getElementById('load').style.display='block';
+  const d=M.scenes[sc];
+  const [f,l,o,ln,j]=await Promise.all([loadKey('fixed'),loadKey('lift'),loadKey('obj'),loadKey('lens1x'),loadKey('jig_'+d.jig)]);
+  for(const g of [gFixed,gLift,gObj,gLens,gJig])clearG(g);
+  for(const [g,src] of [[gFixed,f],[gLift,l],[gObj,o],[gLens,ln],[gJig,j]]){for(const m of src){g.add(m);}}
+  gLift.position.z=d.dz_lift; gLens.position.z=d.dz_lift; gObj.position.z=d.dz_obj;
+  gObj.visible = d.mode!=='1x'; gLens.visible = d.mode==='1x';
+  parts=[]; for(const g of [gFixed,gLift,gObj,gLens,gJig])for(const m of g.children)parts.push({m,g});
+  sideList(); applyVis(); fit(false);
+  document.getElementById('load').style.display='none';
+  const s=M.summary||{};
+  document.getElementById('info').textContent=`${d.title} · 시료면 ${d.z_s} mm · 머리 레일 상승 ${d.dz_lift} mm · 대물 이동 ${d.dz_obj} mm · 개념 조립 모델(제작 도면 아님)`+(s.line?` · ${s.line}`:'');
+  window.__ready=true; cur=sc;
+}
+function applyVis(){
+  const boxOn=document.getElementById('boxon').checked;
+  for(const {m,g} of parts){
+    const u=m.userData; let v=true;
+    if(g===gLift||g===gLens||g===gFixed||g===gObj){ v = (u.step<=curStep) || curStep===0; if(u.step===0)v=true; }
+    if(groupsVis[u.group]===false)v=false;
+    if(u.group==='box'&&!boxOn)v=false;
+    if(g===gObj&&!(M.scenes[sel.value].mode!=='1x'))v=false; if(g===gLens&&!(M.scenes[sel.value].mode==='1x'))v=false;
+    m.visible=v;
+  }
+}
+function sideList(){
+  const d=document.getElementById('side'); d.innerHTML='<b>묶음 보이기</b>'; groupsVis={};
+  const cnt={}; for(const {m} of parts){cnt[m.userData.group]=(cnt[m.userData.group]||0)+1;}
+  for(const g of Object.keys(GROUP_KO)){ if(!cnt[g])continue; groupsVis[g]=true;
+    const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=true;c.onchange=()=>{groupsVis[g]=c.checked;applyVis();};
+    l.appendChild(c);l.append(` ${GROUP_KO[g]} (${cnt[g]})`);d.appendChild(l);}
+  const h=document.createElement('div');h.innerHTML='<br><b>조립 단계 안내</b><br>위쪽 "조립 단계"에서 단계를 고르면 그 단계까지의 부품만 보입니다(바닥 부품은 늘 보임).';d.appendChild(h);
+  const l2=document.createElement('div');l2.style.marginTop='6px';l2.innerHTML='<b>부품 목록</b> (프로파일 뼈대·머리·팔 주요 부품)';d.appendChild(l2);
+  const seen=new Set();
+  for(const {m} of parts){const u=m.userData; if(u.group==='jig'||u.group==='box'||u.group==='board')continue; if(/SCB6-15|HNTFSN6|MSSFS|M6 x/.test(u.name))continue; if(seen.has(u.name))continue; seen.add(u.name);
+    const p=document.createElement('div');p.textContent='· '+u.name;p.style.cursor='pointer';p.onclick=()=>flash(m);d.appendChild(p);}
+}
 let picked=null,pickedEm=0;
-function flash(o){if(picked&&picked.material){picked.material.emissive.setHex(pickedEm);}
- picked=o;pickedEm=o.material.emissive.getHex();o.material.emissive.setHex(0xff3300);
- document.getElementById('pick').textContent=o.userData.name;}
-function fit(near){if(!root)return;const b=new THREE.Box3();
- root.traverse(o=>{if(o.isMesh&&o.visible&&(!near||o.userData.group==='move'||o.name.indexOf('대물')>=0))b.expandByObject(o);});
- if(near){const c=b.getCenter(new THREE.Vector3());b.min.set(c.x-150,c.y-150,0);b.max.set(c.x+150,c.y+150,200);}
- const c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()).length();
- controls.target.copy(c);camera.position.set(c.x+s*0.7,c.y-s*0.9,c.z+s*0.55);camera.near=s/200;camera.far=s*20;camera.updateProjectionMatrix();controls.update();}
-document.getElementById('fit').onclick=()=>fit(false);document.getElementById('near').onclick=()=>fit(true);
-document.getElementById('boxon').onchange=e=>(groups.box||[]).forEach(o=>o.visible=e.target.checked);
-sel.onchange=()=>load(sel.value);
+function flash(o){ if(picked&&picked.material){picked.material.emissive.setHex(pickedEm);} picked=o; pickedEm=o.material.emissive.getHex(); o.material.emissive.setHex(0xff3300);
+  const u=o.userData; document.getElementById('pick').textContent=u.name+(u.pno?'  ·  품번 '+u.pno:''); }
+function fit(mode){
+  const b=new THREE.Box3();
+  root.updateMatrixWorld(true);
+  for(const {m} of parts){ if(!m.visible)continue; const u=m.userData;
+    if(mode==='near'&&!(u.group==='jig'||/대물|SM1NR1|SM1A27|큐브 A/.test(u.name)))continue;
+    if(mode==='head'&&!(u.group==='head'||u.group==='arm'||u.group==='rail'))continue;
+    b.expandByObject(m);}
+  if(b.isEmpty())return;
+  const c=b.getCenter(new THREE.Vector3()), sz=b.getSize(new THREE.Vector3()); let s=sz.length();
+  if(mode==='near'){ s=Math.min(s,420); }
+  controls.target.copy(c);
+  const dir=new THREE.Vector3(0.75,0.45,0.95).normalize();
+  camera.position.copy(c).addScaledVector(dir, s*(mode==='near'?1.1:1.15)); camera.near=s/200; camera.far=s*30; camera.updateProjectionMatrix(); controls.update();
+}
+document.getElementById('fit').onclick=()=>fit(false);document.getElementById('near').onclick=()=>fit('near');document.getElementById('headv').onclick=()=>fit('head');
+document.getElementById('boxon').onchange=applyVis;
+stepSel.onchange=()=>{curStep=parseInt(stepSel.value);applyVis();};
+sel.onchange=()=>show(sel.value);
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
-// tap = pointerdown+pointerup within 6 px and 500 ms; OrbitControls swallows the synthetic click on touch, so click is not used
 const ptrs=new Map();let tap=null;
 canvas.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,1);tap=ptrs.size===1?{x:e.clientX,y:e.clientY,t:performance.now()}:null;});
 canvas.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);tap=null;});
 canvas.addEventListener('pointerup',e=>{ptrs.delete(e.pointerId);const t0=tap;tap=null;
- if(!t0||!root)return;if(Math.hypot(e.clientX-t0.x,e.clientY-t0.y)>6||performance.now()-t0.t>500)return;
+ if(!t0)return;if(Math.hypot(e.clientX-t0.x,e.clientY-t0.y)>6||performance.now()-t0.t>500)return;
  const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
- ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root.children,true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
+ ray.setFromCamera(mouse,camera);
+ const objs=parts.filter(p=>p.m.visible&&p.m.userData.group!=='box').map(p=>p.m);
+ const hit=ray.intersectObjects(objs,false).filter(h=>!(h.object.material&&h.object.material.opacity<0.2));
  if(hit.length)flash(hit[0].object);else document.getElementById('pick').textContent='(빈 곳) 부품 위를 눌러 주세요';});
-function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);}
-resize();load(sel.value);loop();
+window.__pickNamed=(nm)=>{const p=parts.find(p=>p.m.userData.name.includes(nm));if(p){flash(p.m);return true;}return false;};
+window.__setStep=(i)=>{stepSel.value=String(i);curStep=i;applyVis();};
+window.__view=(mode)=>{fit(mode||false);};
+window.__cad=(p,t,fov)=>{camera.position.set(p[0],p[2],-p[1]);controls.target.set(t[0],t[2],-t[1]);if(fov){camera.fov=fov;}camera.near=2;camera.far=20000;camera.updateProjectionMatrix();controls.update();};
+window.__scene=async(k)=>{sel.value=k;await show(k);};
+window.__hideBox=(v)=>{document.getElementById('boxon').checked=!v;applyVis();};
+if(new URLSearchParams(location.search).get('clean')==='1'){for(const id of ['bar','pick','info','side'])document.getElementById(id).style.display='none';}
+function loop(){requestAnimationFrame(loop);controls.update();renderer.render(scene,camera);}
+resize();show(sel.value).then(loop);
 </script></body></html>
