@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PL/EL + LBIC 통합 지도 장치 (알루미늄 프로파일 뼈대, 개념 3D, 2026-11-19 수정)</title>
+<title>PL/EL + LBIC 통합 지도 장치 (프로파일 뼈대, SM1ZB/M 초점부 + 10×/20× 대물, 개념 3D, 2026-11-19)</title>
 <style>
  html,body{margin:0;height:100%}
  body{font-family:Arial,'Malgun Gothic',sans-serif;background:#e9ebee;color:#111;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
@@ -88,19 +88,21 @@ for(const k of Object.keys(M.scenes)){const o=document.createElement('option');o
 STEP_KO.forEach((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=i===0?'전체 (0–8단계)':'~ '+t;stepSel.appendChild(o);});
 stepSel.value='0';
 let cur=null, parts=[], groupsVis={}, curStep=0;
-const gFixed=new THREE.Group(), gLift=new THREE.Group(), gObj=new THREE.Group(), gLens=new THREE.Group(), gJig=new THREE.Group();
-root.add(gFixed,gLift,gObj,gLens,gJig);
+const gFixed=new THREE.Group(), gLift=new THREE.Group(), gObj=new THREE.Group(), gLens=new THREE.Group(), gJig=new THREE.Group(), gZb=new THREE.Group(), gBrk=new THREE.Group();
+const ALLG=[gFixed,gLift,gObj,gLens,gJig,gZb,gBrk];
+root.add(...ALLG);
 function clearG(g){while(g.children.length)g.remove(g.children[0]);}
 const cloneGroup=(src)=>{const out=new THREE.Group(); for(const m of src.children){const c=new THREE.Mesh(m.geometry,m.material);c.userData=m.userData;for(const ch of m.children){const l=new THREE.LineSegments(ch.geometry,ch.material);l.userData.isEdge=true;c.add(l);} out.add(c);} return out;};
 async function show(sc){
   document.getElementById('load').style.display='block';
   const d=M.scenes[sc];
-  const [f,l,o,ln,j]=await Promise.all([loadKey('fixed'),loadKey('lift'),loadKey('obj'),loadKey('lens1x'),loadKey('jig_'+d.jig)]);
-  for(const g of [gFixed,gLift,gObj,gLens,gJig])clearG(g);
-  for(const [g,src] of [[gFixed,f],[gLift,l],[gObj,o],[gLens,ln],[gJig,j]]){for(const m of src){g.add(m);}}
-  gLift.position.z=d.dz_lift; gLens.position.z=d.dz_lift; gObj.position.z=d.dz_obj;
-  gObj.visible = d.mode!=='1x'; gLens.visible = d.mode==='1x';
-  parts=[]; for(const g of [gFixed,gLift,gObj,gLens,gJig])for(const m of g.children)parts.push({m,g});
+  const need=d.mode==='20x'?'obj20':'obj10';
+  const [f,l,o,ln,j,zb,ob,bk]=await Promise.all([loadKey('fixed'),loadKey('lift'),loadKey('obj'),loadKey('lens1x'),loadKey('jig_'+d.jig),loadKey('zb'),loadKey(need),loadKey('brk')]);
+  for(const g of ALLG)clearG(g);
+  for(const [g,src] of [[gFixed,f],[gLift,l],[gObj,o],[gObj,ob],[gLens,ln],[gJig,j],[gZb,zb],[gBrk,bk]]){for(const m of src){g.add(m);}}
+  gLift.position.z=d.dz_lift; gLens.position.z=d.dz_lift; gObj.position.z=d.dz_obj; gZb.position.z=(d.mode==='1x'?d.dz_lift:d.dz_obj);
+  gObj.visible = d.mode!=='1x'; gLens.visible = d.mode==='1x'; gBrk.visible = d.mode!=='1x';
+  parts=[]; for(const g of ALLG)for(const m of g.children)parts.push({m,g});
   sideList(); applyVis(); fit(false);
   document.getElementById('load').style.display='none';
   const s=M.summary||{};
@@ -111,10 +113,10 @@ function applyVis(){
   const boxOn=document.getElementById('boxon').checked;
   for(const {m,g} of parts){
     const u=m.userData; let v=true;
-    if(g===gLift||g===gLens||g===gFixed||g===gObj){ v = (u.step<=curStep) || curStep===0; if(u.step===0)v=true; }
+    if(g!==gJig){ v = (u.step<=curStep) || curStep===0; if(u.step===0)v=true; }
     if(groupsVis[u.group]===false)v=false;
     if(u.group==='box'&&!boxOn)v=false;
-    if(g===gObj&&!(M.scenes[sel.value].mode!=='1x'))v=false; if(g===gLens&&!(M.scenes[sel.value].mode==='1x'))v=false;
+    if((g===gObj||g===gBrk)&&!(M.scenes[sel.value].mode!=='1x'))v=false; if(g===gLens&&!(M.scenes[sel.value].mode==='1x'))v=false;
     m.visible=v;
   }
 }
@@ -138,7 +140,7 @@ function fit(mode){
   const b=new THREE.Box3();
   root.updateMatrixWorld(true);
   for(const {m} of parts){ if(!m.visible)continue; const u=m.userData;
-    if(mode==='near'&&!(u.group==='jig'||/대물|SM1NR1|SM1A27|큐브 A/.test(u.name)))continue;
+    if(mode==='near'&&!(u.group==='jig'||/대물|SM1NR1|SM1ZB|SM1A27|큐브 A/.test(u.name)))continue;
     if(mode==='head'&&!(u.group==='head'||u.group==='arm'||u.group==='rail'))continue;
     b.expandByObject(m);}
   if(b.isEmpty())return;
