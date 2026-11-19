@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PL/EL + LBIC 통합 지도 장치 (알루미늄 프로파일 뼈대, 개념 3D, 2026-11-19)</title>
+<title>PL/EL + LBIC 통합 지도 장치 (알루미늄 프로파일 뼈대, 개념 3D, 2026-11-19 수정)</title>
 <style>
  html,body{margin:0;height:100%}
  body{font-family:Arial,'Malgun Gothic',sans-serif;background:#e9ebee;color:#111;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
@@ -125,6 +125,7 @@ function sideList(){
     const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=true;c.onchange=()=>{groupsVis[g]=c.checked;applyVis();};
     l.appendChild(c);l.append(` ${GROUP_KO[g]} (${cnt[g]})`);d.appendChild(l);}
   const h=document.createElement('div');h.innerHTML='<br><b>조립 단계 안내</b><br>위쪽 "조립 단계"에서 단계를 고르면 그 단계까지의 부품만 보입니다(바닥 부품은 늘 보임).';d.appendChild(h);
+  if(M.notes&&M.notes.length){const nt=document.createElement('div');nt.style.marginTop='6px';nt.innerHTML='<b>알림</b>'+M.notes.map(t=>'<div style="margin:3px 0">· '+t+'</div>').join('');d.appendChild(nt);}
   const l2=document.createElement('div');l2.style.marginTop='6px';l2.innerHTML='<b>부품 목록</b> (프로파일 뼈대·머리·팔 주요 부품)';d.appendChild(l2);
   const seen=new Set();
   for(const {m} of parts){const u=m.userData; if(u.group==='jig'||u.group==='box'||u.group==='board')continue; if(/SCB6-15|HNTFSN6|MSSFS|M6 x/.test(u.name))continue; if(seen.has(u.name))continue; seen.add(u.name);
