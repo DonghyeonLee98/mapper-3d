@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PL/EL + LBIC 통합 지도 장치 (개념 3D, 2026-11-19)</title>
+<style>
+ body{margin:0;font-family:Arial,'Malgun Gothic',sans-serif;background:#f4f4f4;color:#111}
+ #bar{position:absolute;top:0;left:0;right:0;padding:6px 10px;background:#fff;border-bottom:1px solid #ccc;font-size:13px;z-index:2}
+ #bar select,#bar button{font-size:13px;margin-right:6px}
+ #side{position:absolute;top:44px;right:0;width:300px;bottom:0;overflow:auto;background:#fff;border-left:1px solid #ccc;font-size:12px;padding:6px}
+ #side label{display:block;margin:2px 0}
+ #c{position:absolute;top:44px;left:0;right:300px;bottom:0}
+ #info{position:absolute;left:8px;bottom:8px;background:rgba(255,255,255,.9);padding:4px 8px;font-size:12px;border:1px solid #ccc}
+ @media (max-width:700px){#side{top:auto;height:32%;width:auto;left:0;border-left:none;border-top:1px solid #ccc}#c{right:0;bottom:32%}}
+</style></head><body>
+<div id="bar">장면 <select id="scene"></select>
+ <button id="fit">전체 보기</button><button id="near">시료 주변</button>
+ <label><input type="checkbox" id="boxon" checked> 차광 상자(반투명)</label>
+ <span id="hint">드래그: 돌리기 · 휠: 확대 · 오른쪽 드래그: 옮기기 · 부품 클릭: 이름</span></div>
+<canvas id="c"></canvas><div id="side"></div><div id="info">개념 조립 모델 (제작 도면 아님). 플립 거울(MFF101/M) 장착은 가정이며, 가능한지 다시 찾는 중입니다.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="mapper_models.js"></script>
+<script>
+const GROUP_KO={col:'광학 기둥·레이저 팔',vap:'초점 이동대',led1:'470 nm 출력부',led2:'940 nm 출력부',move:'지그·받침판·XY 윗판',stage:'XY 몸체',board:'브레드보드',box:'차광 상자',mffarm:'플립 팔(거울 자리)',mffup:'플립 팔(세운 자리, 참고)',reserve:'예비 면적'};
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(window.devicePixelRatio);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xf4f4f4);
+const camera=new THREE.PerspectiveCamera(35,1,1,20000);camera.up.set(0,0,1);
+const controls=new THREE.OrbitControls(camera,canvas);
+scene.add(new THREE.HemisphereLight(0xffffff,0x666666,0.75));const dl=new THREE.DirectionalLight(0xffffff,0.65);dl.position.set(400,-600,900);scene.add(dl);
+let root=null,groups={};
+function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+window.addEventListener('resize',resize);
+const sel=document.getElementById('scene');
+for(const k of Object.keys(window.MAPPER_META)){const o=document.createElement('option');o.value=k;o.textContent=window.MAPPER_META[k].title;sel.appendChild(o);}
+function b64buf(b){const s=atob(b);const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer;}
+function load(key){
+ if(root){scene.remove(root);}groups={};
+ const meta=window.MAPPER_META[key];const names=meta.order;
+ new THREE.GLTFLoader().parse(b64buf(window.MAPPER_GLB[key]),'',g=>{
+  root=g.scene;let i=0;
+  root.traverse(o=>{if(o.isMesh){
+    // GLTFLoader sanitises node names; parts were written in order, so map by order
+    const nm=names[i]||o.name;const gr=meta.groups[nm]||'?';i++;
+    const isBox=gr==='box';
+    o.material=new THREE.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.6,metalness:0.05,
+      transparent:isBox,opacity:isBox?0.12:1,depthWrite:!isBox,side:THREE.DoubleSide});
+    o.userData.name=nm;o.userData.group=gr;(groups[gr]=groups[gr]||[]).push(o);}});
+  scene.add(root);side(meta);fit(false);
+  document.getElementById('info').textContent=`${meta.title}: 시료면 높이 ${meta.z_sample} mm, 카메라 위 끝 ${meta.top} mm, 대물 끝-지그 최고점 ${meta.wd_gap} mm (개념 모델)`;
+ });}
+function side(meta){const d=document.getElementById('side');d.innerHTML='<b>묶음 보이기</b>';
+ for(const [g,arr] of Object.entries(groups)){const l=document.createElement('label');const c=document.createElement('input');c.type='checkbox';c.checked=true;
+  c.onchange=()=>arr.forEach(o=>o.visible=c.checked);l.appendChild(c);l.append(` ${GROUP_KO[g]||g} (${arr.length})`);d.appendChild(l);}
+ const h=document.createElement('div');h.innerHTML='<br><b>부품</b>';d.appendChild(h);
+ for(const [g,arr] of Object.entries(groups)){if(g==='move'&&arr.length>40){const p=document.createElement('div');p.textContent=`(지그 부품 ${arr.length}개는 목록 생략, 클릭하면 이름 표시)`;d.appendChild(p);continue;}
+  arr.forEach(o=>{const p=document.createElement('div');p.textContent='· '+o.userData.name;p.style.cursor='pointer';p.onclick=()=>flash(o);d.appendChild(p);});}}
+function flash(o){const m=o.material;const c=m.emissive.getHex();m.emissive.setHex(0xff3300);setTimeout(()=>m.emissive.setHex(c),900);document.getElementById('info').textContent=o.userData.name;}
+function fit(near){if(!root)return;const b=new THREE.Box3();
+ root.traverse(o=>{if(o.isMesh&&o.visible&&(!near||o.userData.group==='move'||o.name.indexOf('대물')>=0))b.expandByObject(o);});
+ if(near){const c=b.getCenter(new THREE.Vector3());b.min.set(c.x-150,c.y-150,0);b.max.set(c.x+150,c.y+150,200);}
+ const c=b.getCenter(new THREE.Vector3()),s=b.getSize(new THREE.Vector3()).length();
+ controls.target.copy(c);camera.position.set(c.x+s*0.7,c.y-s*0.9,c.z+s*0.55);camera.near=s/200;camera.far=s*20;camera.updateProjectionMatrix();controls.update();}
+document.getElementById('fit').onclick=()=>fit(false);document.getElementById('near').onclick=()=>fit(true);
+document.getElementById('boxon').onchange=e=>(groups.box||[]).forEach(o=>o.visible=e.target.checked);
+sel.onchange=()=>load(sel.value);
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
+canvas.addEventListener('dblclick',e=>{const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
+ ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root?root.children:[],true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
+ if(hit.length)flash(hit[0].object);});
+canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-(e.clientY-r.top)/r.height*2+1;
+ ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(root?root.children:[],true).filter(h=>h.object.visible&&h.object.userData.group!=='box');
+ if(hit.length)document.getElementById('info').textContent=hit[0].object.userData.name;});
+function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);}
+resize();load(sel.value);loop();
+</script></body></html>
